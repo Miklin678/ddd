@@ -3,6 +3,10 @@ import os
 import json
 import requests
 
+git add requirements.txt
+git commit -m "添加依赖文件"
+git push origin main
+
 API_URL = "https://api.siliconflow.cn/v1/chat/completions"
 MODEL = "deepseek-ai/DeepSeek-V4-Pro"
 API_KEY = "sk-yvdfsrryqlywwdwfoqtfajaijvniafpsgtetwpkzqqvhecrs"
