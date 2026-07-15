@@ -263,9 +263,4 @@ def main():
         st.session_state.messages.append({"role": "assistant", "content": response})
 
 if __name__ == "__main__":
-    import sys
-    if len(sys.argv) > 1 and sys.argv[1] == "direct":
-        main()
-    else:
-        import subprocess
-        subprocess.run([sys.executable, "-m", "streamlit", "run", sys.argv[0], "--server.headless=true"])
+    main()
