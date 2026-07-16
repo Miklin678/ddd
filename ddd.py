@@ -207,8 +207,8 @@ def main():
     
     if "identity" not in st.session_state:
         st.session_state.identity = None
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+    if "identity_messages" not in st.session_state:
+        st.session_state.identity_messages = {}
     
     with st.sidebar:
         st.header("身份选择")
@@ -217,15 +217,17 @@ def main():
         
         if selected_identity:
             if selected_identity == "大一新生":
-                st.session_state.identity = "新生"
+                new_identity = "新生"
             elif selected_identity == "在校老生":
-                st.session_state.identity = "在校生"
+                new_identity = "在校生"
             elif selected_identity == "高校教师":
-                st.session_state.identity = "教师"
+                new_identity = "教师"
             
-            system_prompt = get_system_prompt(st.session_state.identity)
-            if not st.session_state.messages or st.session_state.messages[0]["content"] != system_prompt:
-                st.session_state.messages = [{"role": "system", "content": system_prompt}]
+            st.session_state.identity = new_identity
+            
+            if new_identity not in st.session_state.identity_messages:
+                system_prompt = get_system_prompt(new_identity)
+                st.session_state.identity_messages[new_identity] = [{"role": "system", "content": system_prompt}]
         
         if st.session_state.identity:
             st.success(f"已切换至【{st.session_state.identity}】模式")
@@ -234,7 +236,9 @@ def main():
         st.info("请在左侧边栏选择你的身份开始对话")
         return
     
-    for msg in st.session_state.messages:
+    current_messages = st.session_state.identity_messages.get(st.session_state.identity, [])
+    
+    for msg in current_messages:
         if msg["role"] != "system":
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
@@ -245,17 +249,18 @@ def main():
         cols = st.columns(2)
         for i, q in enumerate(questions):
             with cols[i % 2]:
-                if st.button(q, key=f"quick_{i}"):
-                    st.session_state.messages.append({"role": "user", "content": q})
+                if st.button(q, key=f"quick_{st.session_state.identity}_{i}"):
+                    current_messages.append({"role": "user", "content": q})
                     with st.chat_message("user"):
                         st.markdown(q)
                     
                     with st.chat_message("assistant"):
                         with st.spinner("小航正在思考..."):
-                            response = call_api(st.session_state.messages)
+                            response = call_api(current_messages)
                             st.markdown(response)
                     
-                    st.session_state.messages.append({"role": "assistant", "content": response})
+                    current_messages.append({"role": "assistant", "content": response})
+                    st.session_state.identity_messages[st.session_state.identity] = current_messages
     
     user_input = st.chat_input("请输入你的问题...")
     
@@ -263,16 +268,17 @@ def main():
         if not is_valid_input(user_input):
             st.error("请输入有效的问题，不能只输入空格或特殊字符！")
         else:
-            st.session_state.messages.append({"role": "user", "content": user_input})
+            current_messages.append({"role": "user", "content": user_input})
             with st.chat_message("user"):
                 st.markdown(user_input)
             
             with st.chat_message("assistant"):
                 with st.spinner("小航正在思考..."):
-                    response = call_api(st.session_state.messages)
+                    response = call_api(current_messages)
                     st.markdown(response)
             
-            st.session_state.messages.append({"role": "assistant", "content": response})
+            current_messages.append({"role": "assistant", "content": response})
+            st.session_state.identity_messages[st.session_state.identity] = current_messages
 
 if __name__ == "__main__":
     main()
