@@ -239,6 +239,11 @@ def main():
         
         if st.session_state.identity:
             st.success(f"已切换至【{st.session_state.identity}】模式")
+            
+            if st.button("清空当前身份对话历史", key="clear_history", type="secondary"):
+                system_prompt = get_system_prompt(st.session_state.identity)
+                st.session_state.identity_messages[st.session_state.identity] = [{"role": "system", "content": system_prompt}]
+                st.success("对话历史已清空！")
     
     if not st.session_state.identity:
         st.info("请在左侧边栏选择你的身份开始对话")
