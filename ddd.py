@@ -161,7 +161,7 @@ def is_valid_input(text):
 def call_api(messages, stream=True):
     api_key = API_KEY
     if api_key is None or api_key == "你的API Key":
-        raise ValueError("请在代码中配置 API_KEY")
+        return "错误：请在代码中配置 API_KEY"
     
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -176,29 +176,37 @@ def call_api(messages, stream=True):
         "max_tokens": 1024
     }
     
-    response = requests.post(API_URL, headers=headers, json=payload, stream=stream)
-    response.raise_for_status()
+    try:
+        response = requests.post(API_URL, headers=headers, json=payload, stream=stream, timeout=60)
+        response.raise_for_status()
+    except requests.exceptions.Timeout:
+        return "⚠️ 请求超时，请稍后重试或检查网络连接。"
+    except requests.exceptions.RequestException as e:
+        return f"⚠️ 请求失败：{str(e)}"
     
-    if stream:
-        full_response = ""
-        for line in response.iter_lines():
-            if line:
-                decoded_line = line.decode('utf-8')
-                if decoded_line.startswith('data: '):
-                    data_str = decoded_line[6:]
-                    if data_str == '[DONE]':
-                        break
-                    try:
-                        data = json.loads(data_str)
-                        if data.get('choices') and data['choices'][0].get('delta', {}).get('content'):
-                            content = data['choices'][0]['delta']['content']
-                            full_response += content
-                    except json.JSONDecodeError:
-                        continue
-        return full_response
-    else:
-        result = response.json()
-        return result['choices'][0]['message']['content']
+    try:
+        if stream:
+            full_response = ""
+            for line in response.iter_lines():
+                if line:
+                    decoded_line = line.decode('utf-8')
+                    if decoded_line.startswith('data: '):
+                        data_str = decoded_line[6:]
+                        if data_str == '[DONE]':
+                            break
+                        try:
+                            data = json.loads(data_str)
+                            if data.get('choices') and data['choices'][0].get('delta', {}).get('content'):
+                                content = data['choices'][0]['delta']['content']
+                                full_response += content
+                        except json.JSONDecodeError:
+                            continue
+            return full_response
+        else:
+            result = response.json()
+            return result['choices'][0]['message']['content']
+    except Exception as e:
+        return f"⚠️ 解析响应失败：{str(e)}"
 
 def main():
     st.set_page_config(page_title="小航AI助手", page_icon="✈️", layout="wide")
