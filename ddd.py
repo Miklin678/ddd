@@ -2,6 +2,7 @@ import streamlit as st
 import os
 import json
 import requests
+from datetime import datetime
 
 API_URL = "https://api.siliconflow.cn/v1/chat/completions"
 MODEL = "deepseek-ai/DeepSeek-V4-Pro"
@@ -158,6 +159,25 @@ def is_valid_input(text):
     has_alphanumeric = any(c.isalnum() for c in stripped)
     return has_alphanumeric
 
+def export_conversation(messages, identity):
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"对话记录_{identity}_{timestamp}.md"
+    
+    content = f"# 小航AI助手 - 对话记录\n\n"
+    content += f"**身份**: {identity}\n"
+    content += f"**导出时间**: {datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}\n"
+    content += f"**对话轮数**: {len([m for m in messages if m['role'] != 'system']) // 2}\n\n"
+    content += "---\n\n"
+    
+    for msg in messages:
+        if msg["role"] == "system":
+            continue
+        role_name = "用户" if msg["role"] == "user" else "小航"
+        content += f"## {role_name}\n\n"
+        content += f"{msg['content']}\n\n"
+    
+    return content, filename
+
 def call_api(messages, stream=True):
     api_key = API_KEY
     if api_key is None or api_key == "你的API Key":
@@ -244,6 +264,17 @@ def main():
                 system_prompt = get_system_prompt(st.session_state.identity)
                 st.session_state.identity_messages[st.session_state.identity] = [{"role": "system", "content": system_prompt}]
                 st.success("对话历史已清空！")
+            
+            current_messages_export = st.session_state.identity_messages.get(st.session_state.identity, [])
+            if len([m for m in current_messages_export if m['role'] != 'system']) > 0:
+                export_content, export_filename = export_conversation(current_messages_export, st.session_state.identity)
+                st.download_button(
+                    label="导出对话记录",
+                    data=export_content,
+                    file_name=export_filename,
+                    mime="text/markdown",
+                    key="export_history"
+                )
     
     if not st.session_state.identity:
         st.info("请在左侧边栏选择你的身份开始对话")
