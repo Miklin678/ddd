@@ -149,6 +149,15 @@ def get_system_prompt(identity):
     
     return prompt
 
+def is_valid_input(text):
+    if not text:
+        return False
+    stripped = text.strip()
+    if not stripped:
+        return False
+    has_alphanumeric = any(c.isalnum() for c in stripped)
+    return has_alphanumeric
+
 def call_api(messages, stream=True):
     api_key = API_KEY
     if api_key is None or api_key == "你的API Key":
@@ -251,16 +260,19 @@ def main():
     user_input = st.chat_input("请输入你的问题...")
     
     if user_input:
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        with st.chat_message("user"):
-            st.markdown(user_input)
-        
-        with st.chat_message("assistant"):
-            with st.spinner("小航正在思考..."):
-                response = call_api(st.session_state.messages)
-                st.markdown(response)
-        
-        st.session_state.messages.append({"role": "assistant", "content": response})
+        if not is_valid_input(user_input):
+            st.error("请输入有效的问题，不能只输入空格或特殊字符！")
+        else:
+            st.session_state.messages.append({"role": "user", "content": user_input})
+            with st.chat_message("user"):
+                st.markdown(user_input)
+            
+            with st.chat_message("assistant"):
+                with st.spinner("小航正在思考..."):
+                    response = call_api(st.session_state.messages)
+                    st.markdown(response)
+            
+            st.session_state.messages.append({"role": "assistant", "content": response})
 
 if __name__ == "__main__":
     main()
