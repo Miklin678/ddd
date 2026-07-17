@@ -462,7 +462,7 @@ def call_api(messages, stream=False):
     
     try:
         # 发送POST请求，5秒超时
-        response = requests.post(API_URL, headers=headers, json=payload, stream=stream, timeout=35)
+        response = requests.post(API_URL, headers=headers, json=payload, stream=stream, timeout=60)
         response.raise_for_status()
         
         # 解析JSON响应
@@ -596,40 +596,43 @@ def main():
             # 文件导入功能
             st.divider()
             st.header("导入文件")
-            uploaded_file = st.file_uploader(
-                "上传TXT或DOCX文件",
-                type=["txt", "docx"],
-                key="file_uploader"
-            )
             
-            if uploaded_file is not None:
-                file_name = uploaded_file.name
-                file_ext = file_name.split('.')[-1].lower()
+            with st.form("upload_form", clear_on_submit=True):
+                uploaded_file = st.file_uploader(
+                    "上传TXT或DOCX文件",
+                    type=["txt", "docx"],
+                    key="file_uploader"
+                )
+                submit_button = st.form_submit_button("导入文件")
                 
-                # 读取文件内容
-                file_bytes = uploaded_file.read()
-                
-                if file_ext == 'txt':
-                    file_content = read_txt_file(file_bytes)
-                elif file_ext == 'docx':
-                    file_content = read_docx_file(file_bytes)
-                else:
-                    st.error("不支持的文件格式！")
-                    file_content = ""
-                
-                if file_content and st.session_state.identity:
-                    # 将文件内容作为用户输入发送
-                    current_messages_import = st.session_state.identity_messages.get(st.session_state.identity, [])
-                    current_messages_import.append({"role": "user", "content": f"根据以下文件内容回答问题：\n\n{file_content}"})
-                    st.session_state.identity_messages[st.session_state.identity] = current_messages_import
-                    save_conversation_history(st.session_state.identity_messages)
-                    st.session_state.loading = True
-                    st.success(f"文件 '{file_name}' 已导入！")
-                    st.rerun()
-                elif not st.session_state.identity:
-                    st.warning("请先选择身份再导入文件！")
-                elif not file_content:
-                    st.error("文件内容为空或读取失败！")
+                if submit_button and uploaded_file is not None:
+                    file_name = uploaded_file.name
+                    file_ext = file_name.split('.')[-1].lower()
+                    
+                    # 读取文件内容
+                    file_bytes = uploaded_file.read()
+                    
+                    if file_ext == 'txt':
+                        file_content = read_txt_file(file_bytes)
+                    elif file_ext == 'docx':
+                        file_content = read_docx_file(file_bytes)
+                    else:
+                        st.error("不支持的文件格式！")
+                        file_content = ""
+                    
+                    if file_content and st.session_state.identity:
+                        # 将文件内容作为用户输入发送
+                        current_messages_import = st.session_state.identity_messages.get(st.session_state.identity, [])
+                        current_messages_import.append({"role": "user", "content": f"根据以下文件内容回答问题：\n\n{file_content}"})
+                        st.session_state.identity_messages[st.session_state.identity] = current_messages_import
+                        save_conversation_history(st.session_state.identity_messages)
+                        st.session_state.loading = True
+                        st.success(f"文件 '{file_name}' 已导入！")
+                        st.rerun()
+                    elif not st.session_state.identity:
+                        st.warning("请先选择身份再导入文件！")
+                    elif not file_content:
+                        st.error("文件内容为空或读取失败！")
     
     # ==================== 主内容区 ====================
     # 如果未选择身份，显示提示信息
