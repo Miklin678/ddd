@@ -197,7 +197,7 @@ def export_conversation(messages, identity, export_format="md"):
     
     return content, filename, mime
 
-def call_api(messages, stream=True):
+def call_api(messages, stream=True, timeout=60):
     import time
     start_time = time.time()
     
@@ -215,20 +215,16 @@ def call_api(messages, stream=True):
         "messages": messages,
         "stream": stream,
         "temperature": 0.7,
-        "max_tokens": 1024
+        "max_tokens": 4096
     }
     
     try:
-        response = requests.post(API_URL, headers=headers, json=payload, stream=stream, timeout=60)
+        response = requests.post(API_URL, headers=headers, json=payload, stream=stream, timeout=timeout)
         response.raise_for_status()
-    except requests.exceptions.Timeout:
-        return "⚠️ 请求超时，请稍后重试或检查网络连接。", time.time() - start_time
-    except requests.exceptions.RequestException as e:
-        return f"⚠️ 请求失败：{str(e)}", time.time() - start_time
-    
-    try:
+        
         if stream:
             full_response = ""
+            finish_reason = None
             for line in response.iter_lines():
                 if line:
                     decoded_line = line.decode('utf-8')
@@ -238,17 +234,44 @@ def call_api(messages, stream=True):
                             break
                         try:
                             data = json.loads(data_str)
-                            if data.get('choices') and data['choices'][0].get('delta', {}).get('content'):
-                                content = data['choices'][0]['delta']['content']
-                                full_response += content
+                            if data.get('choices'):
+                                delta = data['choices'][0].get('delta', {})
+                                if delta.get('content'):
+                                    full_response += delta['content']
+                                if 'finish_reason' in data['choices'][0]:
+                                    finish_reason = data['choices'][0]['finish_reason']
                         except json.JSONDecodeError:
                             continue
+            
+            if finish_reason == "length" and full_response:
+                messages.append({"role": "assistant", "content": full_response})
+                messages.append({"role": "user", "content": "请继续"})
+                continuation = call_api(messages, stream=stream, timeout=timeout)[0]
+                if continuation and not continuation.startswith("⚠️"):
+                    full_response += continuation
+            
             return full_response, time.time() - start_time
         else:
             result = response.json()
-            return result['choices'][0]['message']['content'], time.time() - start_time
-    except Exception as e:
-        return f"⚠️ 解析响应失败：{str(e)}", time.time() - start_time
+            full_response = result['choices'][0]['message']['content']
+            finish_reason = result['choices'][0].get('finish_reason')
+            
+            if finish_reason == "length" and full_response:
+                messages.append({"role": "assistant", "content": full_response})
+                messages.append({"role": "user", "content": "请继续"})
+                continuation = call_api(messages, stream=stream, timeout=timeout)[0]
+                if continuation and not continuation.startswith("⚠️"):
+                    full_response += continuation
+            
+            return full_response, time.time() - start_time
+    except requests.exceptions.ConnectionError:
+        return "⚠️ 网络连接异常，请检查网络后重试", time.time() - start_time
+    except requests.exceptions.Timeout:
+        return "⚠️ 请求超时，请稍后重试", time.time() - start_time
+    except requests.exceptions.ChunkedEncodingError:
+        return "⚠️ 网络连接中断，请检查网络后重试", time.time() - start_time
+    except requests.exceptions.RequestException as e:
+        return f"⚠️ 请求失败：{str(e)}", time.time() - start_time
 
 def main():
     st.set_page_config(page_title="小航AI助手", page_icon="✈️", layout="wide")
