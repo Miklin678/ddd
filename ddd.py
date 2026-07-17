@@ -197,7 +197,7 @@ def export_conversation(messages, identity, export_format="md"):
     
     return content, filename, mime
 
-def call_api(messages, stream=True, timeout=60):
+def call_api(messages, stream=True):
     import time
     start_time = time.time()
     
@@ -215,63 +215,77 @@ def call_api(messages, stream=True, timeout=60):
         "messages": messages,
         "stream": stream,
         "temperature": 0.7,
-        "max_tokens": 4096
+        "max_tokens": 1024
     }
     
-    try:
-        response = requests.post(API_URL, headers=headers, json=payload, stream=stream, timeout=timeout)
-        response.raise_for_status()
+    max_retries = 3
+    retry_delay = 2
+    
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(API_URL, headers=headers, json=payload, stream=stream, timeout=35)
+            response.raise_for_status()
+            
+            if stream:
+                full_response = ""
+                for line in response.iter_lines():
+                    if line:
+                        decoded_line = line.decode('utf-8')
+                        if decoded_line.startswith('data: '):
+                            data_str = decoded_line[6:]
+                            if data_str == '[DONE]':
+                                break
+                            try:
+                                data = json.loads(data_str)
+                                if data.get('choices') and data['choices'][0].get('delta', {}).get('content'):
+                                    content = data['choices'][0]['delta']['content']
+                                    full_response += content
+                            except json.JSONDecodeError:
+                                continue
+                return full_response, time.time() - start_time
+            else:
+                result = response.json()
+                return result['choices'][0]['message']['content'], time.time() - start_time
         
-        if stream:
-            full_response = ""
-            finish_reason = None
-            for line in response.iter_lines():
-                if line:
-                    decoded_line = line.decode('utf-8')
-                    if decoded_line.startswith('data: '):
-                        data_str = decoded_line[6:]
-                        if data_str == '[DONE]':
-                            break
-                        try:
-                            data = json.loads(data_str)
-                            if data.get('choices'):
-                                delta = data['choices'][0].get('delta', {})
-                                if delta.get('content'):
-                                    full_response += delta['content']
-                                if 'finish_reason' in data['choices'][0]:
-                                    finish_reason = data['choices'][0]['finish_reason']
-                        except json.JSONDecodeError:
-                            continue
-            
-            if finish_reason == "length" and full_response:
-                messages.append({"role": "assistant", "content": full_response})
-                messages.append({"role": "user", "content": "请继续"})
-                continuation = call_api(messages, stream=stream, timeout=timeout)[0]
-                if continuation and not continuation.startswith("⚠️"):
-                    full_response += continuation
-            
-            return full_response, time.time() - start_time
-        else:
-            result = response.json()
-            full_response = result['choices'][0]['message']['content']
-            finish_reason = result['choices'][0].get('finish_reason')
-            
-            if finish_reason == "length" and full_response:
-                messages.append({"role": "assistant", "content": full_response})
-                messages.append({"role": "user", "content": "请继续"})
-                continuation = call_api(messages, stream=stream, timeout=timeout)[0]
-                if continuation and not continuation.startswith("⚠️"):
-                    full_response += continuation
-            
-            return full_response, time.time() - start_time
-    except requests.exceptions.ConnectionError:
-        return "⚠️ 网络连接异常，请检查网络后重试", time.time() - start_time
-    except requests.exceptions.Timeout:
-        return "⚠️ 请求超时，请稍后重试", time.time() - start_time
-    except requests.exceptions.ChunkedEncodingError:
-        return "⚠️ 网络连接中断，请检查网络后重试", time.time() - start_time
-    except requests.exceptions.RequestException as e:
-        return f"⚠️ 请求失败：{str(e)}", time.time() - start_time
+        except requests.exceptions.Timeout:
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay * (attempt + 1))
+                continue
+            return "⚠️ 请求超时，请稍后重试或检查网络连接。\n\n💡 建议：\n1. 检查网络连接是否正常\n2. 尝试切换WiFi或移动数据\n3. 稍后再次尝试", time.time() - start_time
+        
+        except requests.exceptions.ConnectionError:
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay * (attempt + 1))
+                continue
+            return "⚠️ 网络连接失败，请检查网络设置。\n\n💡 建议：\n1. 检查网络连接是否正常\n2. 尝试重启路由器\n3. 尝试切换网络\n4. 确认防火墙未阻止应用访问网络", time.time() - start_time
+        
+        except requests.exceptions.HTTPError as e:
+            error_code = response.status_code if 'response' in dir() else '未知'
+            error_messages = {
+                401: "⚠️ 认证失败，请检查API Key是否正确。",
+                403: "⚠️ 访问被拒绝，可能是API Key无效或模型已禁用。",
+                404: "⚠️ 请求的资源不存在。",
+                429: "⚠️ 请求过于频繁，请稍后再试。\n\n💡 建议：减少提问频率，稍后再次尝试。",
+                500: "⚠️ 服务器内部错误，请稍后重试。",
+                502: "⚠️ 网关错误，请稍后重试。",
+                503: "⚠️ 服务暂时不可用，请稍后重试。",
+                504: "⚠️ 网关超时，请稍后重试。"
+            }
+            if error_code in error_messages:
+                return error_messages[error_code], time.time() - start_time
+            return f"⚠️ HTTP错误 {error_code}: {str(e)}", time.time() - start_time
+        
+        except requests.exceptions.RequestException as e:
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay * (attempt + 1))
+                continue
+            return f"⚠️ 请求失败：{str(e)}\n\n💡 建议：\n1. 检查网络连接\n2. 确认API Key有效\n3. 稍后再次尝试", time.time() - start_time
+        
+        except Exception as e:
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay * (attempt + 1))
+                continue
+            return f"⚠️ 解析响应失败：{str(e)}", time.time() - start_time
 
 def main():
     st.set_page_config(page_title="小航AI助手", page_icon="✈️", layout="wide")
