@@ -52,7 +52,7 @@ RECOMMENDED_QUESTIONS = {
 
 def load_school_data():
     data_dir = "data"
-    files = ["校园概况.md", "办事指南.md", "生活服务.md", "教学管理.md", "电话黄页.md"]
+    files = ["校园概况.md", "办事指南.md", "生活服务.md", "教学管理.md", "电话黄页.md", "交通出行.md"]
     all_content = ""
     for filename in files:
         filepath = os.path.join(data_dir, filename)
@@ -198,9 +198,12 @@ def export_conversation(messages, identity, export_format="md"):
     return content, filename, mime
 
 def call_api(messages, stream=True):
+    import time
+    start_time = time.time()
+    
     api_key = API_KEY
     if api_key is None or api_key == "你的API Key":
-        return "错误：请在代码中配置 API_KEY"
+        return "错误：请在代码中配置 API_KEY", 0
     
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -219,9 +222,9 @@ def call_api(messages, stream=True):
         response = requests.post(API_URL, headers=headers, json=payload, stream=stream, timeout=60)
         response.raise_for_status()
     except requests.exceptions.Timeout:
-        return "⚠️ 请求超时，请稍后重试或检查网络连接。"
+        return "⚠️ 请求超时，请稍后重试或检查网络连接。", time.time() - start_time
     except requests.exceptions.RequestException as e:
-        return f"⚠️ 请求失败：{str(e)}"
+        return f"⚠️ 请求失败：{str(e)}", time.time() - start_time
     
     try:
         if stream:
@@ -240,12 +243,12 @@ def call_api(messages, stream=True):
                                 full_response += content
                         except json.JSONDecodeError:
                             continue
-            return full_response
+            return full_response, time.time() - start_time
         else:
             result = response.json()
-            return result['choices'][0]['message']['content']
+            return result['choices'][0]['message']['content'], time.time() - start_time
     except Exception as e:
-        return f"⚠️ 解析响应失败：{str(e)}"
+        return f"⚠️ 解析响应失败：{str(e)}", time.time() - start_time
 
 def main():
     st.set_page_config(page_title="小航AI助手", page_icon="✈️", layout="wide")
@@ -326,8 +329,10 @@ def main():
                     
                     with st.chat_message("assistant"):
                         with st.spinner("小航正在思考..."):
-                            response = call_api(current_messages)
+                            response, elapsed_time = call_api(current_messages)
                             st.markdown(response)
+                            word_count = len(response)
+                            st.caption(f"字数: {word_count} | 耗时: {elapsed_time:.2f}秒")
                     
                     current_messages.append({"role": "assistant", "content": response})
                     st.session_state.identity_messages[st.session_state.identity] = current_messages
@@ -344,8 +349,10 @@ def main():
             
             with st.chat_message("assistant"):
                 with st.spinner("小航正在思考..."):
-                    response = call_api(current_messages)
+                    response, elapsed_time = call_api(current_messages)
                     st.markdown(response)
+                    word_count = len(response)
+                    st.caption(f"字数: {word_count} | 耗时: {elapsed_time:.2f}秒")
             
             current_messages.append({"role": "assistant", "content": response})
             st.session_state.identity_messages[st.session_state.identity] = current_messages
