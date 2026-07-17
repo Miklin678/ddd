@@ -219,7 +219,7 @@ def call_api(messages, stream=False):
     }
     
     try:
-        response = requests.post(API_URL, headers=headers, json=payload, stream=stream, timeout=15)
+        response = requests.post(API_URL, headers=headers, json=payload, stream=stream, timeout=5)
         response.raise_for_status()
         
         result = response.json()
