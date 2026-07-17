@@ -7,6 +7,7 @@ from datetime import datetime
 API_URL = "https://api.siliconflow.cn/v1/chat/completions"
 MODEL = "deepseek-ai/DeepSeek-V4-Pro"
 API_KEY = "sk-cymbwrotvdjtcbqpxvfrcojfiwlwuefpnktswzohudvtzxxy"
+
 ALIAS_DICT = """
 【别名词典】
 - 教务处 = 教学管理处
@@ -252,6 +253,14 @@ def call_api(messages, stream=True):
 def main():
     st.set_page_config(page_title="小航AI助手", page_icon="✈️", layout="wide")
     
+    st.markdown("""
+    <style>
+    .st-chat-message {
+        text-align: left !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     st.title("✈️ 小航AI助手 - 郑州航空工业管理学院")
     
     if "identity" not in st.session_state:
@@ -314,6 +323,8 @@ def main():
         if msg["role"] != "system":
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
+                if msg["role"] == "assistant" and "word_count" in msg:
+                    st.caption(f"字数: {msg['word_count']} | 耗时: {msg['elapsed_time']:.2f}秒")
     
     questions = RECOMMENDED_QUESTIONS.get(st.session_state.identity, [])
     if questions:
@@ -323,18 +334,12 @@ def main():
             with cols[i % 2]:
                 if st.button(q, key=f"quick_{st.session_state.identity}_{i}"):
                     current_messages.append({"role": "user", "content": q})
-                    with st.chat_message("user"):
-                        st.markdown(q)
-                    
-                    with st.chat_message("assistant"):
-                        with st.spinner("小航正在思考..."):
-                            response, elapsed_time = call_api(current_messages)
-                            st.markdown(response)
-                            word_count = len(response)
-                            st.caption(f"字数: {word_count} | 耗时: {elapsed_time:.2f}秒")
-                    
-                    current_messages.append({"role": "assistant", "content": response})
+                    with st.spinner("小航正在思考..."):
+                        response, elapsed_time = call_api(current_messages)
+                    word_count = len(response)
+                    current_messages.append({"role": "assistant", "content": response, "word_count": word_count, "elapsed_time": elapsed_time})
                     st.session_state.identity_messages[st.session_state.identity] = current_messages
+                    st.rerun()
     
     user_input = st.chat_input("请输入你的问题...")
     
@@ -346,15 +351,12 @@ def main():
             with st.chat_message("user"):
                 st.markdown(user_input)
             
-            with st.chat_message("assistant"):
-                with st.spinner("小航正在思考..."):
-                    response, elapsed_time = call_api(current_messages)
-                    st.markdown(response)
-                    word_count = len(response)
-                    st.caption(f"字数: {word_count} | 耗时: {elapsed_time:.2f}秒")
-            
-            current_messages.append({"role": "assistant", "content": response})
+            with st.spinner("小航正在思考..."):
+                response, elapsed_time = call_api(current_messages)
+            word_count = len(response)
+            current_messages.append({"role": "assistant", "content": response, "word_count": word_count, "elapsed_time": elapsed_time})
             st.session_state.identity_messages[st.session_state.identity] = current_messages
+            st.rerun()
 
 if __name__ == "__main__":
     main()
