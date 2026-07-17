@@ -267,6 +267,8 @@ def main():
         st.session_state.identity = None
     if "identity_messages" not in st.session_state:
         st.session_state.identity_messages = {}
+    if "loading" not in st.session_state:
+        st.session_state.loading = False
     
     with st.sidebar:
         st.header("身份选择")
@@ -326,6 +328,18 @@ def main():
                 if msg["role"] == "assistant" and "word_count" in msg:
                     st.caption(f"字数: {msg['word_count']} | 耗时: {msg['elapsed_time']:.2f}秒")
     
+    if st.session_state.loading:
+        with st.chat_message("assistant"):
+            with st.spinner("小航正在思考..."):
+                response, elapsed_time = call_api(current_messages)
+            word_count = len(response)
+            st.markdown(response)
+            st.caption(f"字数: {word_count} | 耗时: {elapsed_time:.2f}秒")
+        current_messages.append({"role": "assistant", "content": response, "word_count": word_count, "elapsed_time": elapsed_time})
+        st.session_state.identity_messages[st.session_state.identity] = current_messages
+        st.session_state.loading = False
+        st.rerun()
+    
     questions = RECOMMENDED_QUESTIONS.get(st.session_state.identity, [])
     if questions:
         st.subheader("快捷问题")
@@ -334,10 +348,7 @@ def main():
             with cols[i % 2]:
                 if st.button(q, key=f"quick_{st.session_state.identity}_{i}"):
                     current_messages.append({"role": "user", "content": q})
-                    with st.spinner("小航正在思考..."):
-                        response, elapsed_time = call_api(current_messages)
-                    word_count = len(response)
-                    current_messages.append({"role": "assistant", "content": response, "word_count": word_count, "elapsed_time": elapsed_time})
+                    st.session_state.loading = True
                     st.session_state.identity_messages[st.session_state.identity] = current_messages
                     st.rerun()
     
@@ -348,13 +359,7 @@ def main():
             st.error("请输入有效的问题，不能只输入空格或特殊字符！")
         else:
             current_messages.append({"role": "user", "content": user_input})
-            with st.chat_message("user"):
-                st.markdown(user_input)
-            
-            with st.spinner("小航正在思考..."):
-                response, elapsed_time = call_api(current_messages)
-            word_count = len(response)
-            current_messages.append({"role": "assistant", "content": response, "word_count": word_count, "elapsed_time": elapsed_time})
+            st.session_state.loading = True
             st.session_state.identity_messages[st.session_state.identity] = current_messages
             st.rerun()
 
