@@ -387,7 +387,7 @@ def call_api(messages, stream=False):
     
     try:
         # 发送POST请求，5秒超时
-        response = requests.post(API_URL, headers=headers, json=payload, stream=stream, timeout=5)
+        response = requests.post(API_URL, headers=headers, json=payload, stream=stream, timeout=35)
         response.raise_for_status()
         
         # 解析JSON响应
