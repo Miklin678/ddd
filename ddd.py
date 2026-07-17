@@ -284,18 +284,23 @@ def main():
                 st.session_state.identity_messages[st.session_state.identity] = [{"role": "system", "content": system_prompt}]
                 st.success("对话历史已清空！")
             
-            current_messages_export = st.session_state.identity_messages.get(st.session_state.identity, [])
-            if len([m for m in current_messages_export if m['role'] != 'system']) > 0:
-                export_format = st.radio("导出格式", ["Markdown (.md)", "纯文本 (.txt)"], key="export_format")
-                format_type = "md" if export_format == "Markdown (.md)" else "txt"
-                export_content, export_filename, export_mime = export_conversation(current_messages_export, st.session_state.identity, format_type)
-                st.download_button(
-                    label="导出对话记录",
-                    data=export_content,
-                    file_name=export_filename,
-                    mime=export_mime,
-                    key="export_history"
-                )
+            export_format = st.radio("导出格式", ["Markdown (.md)", "纯文本 (.txt)"], key="export_format")
+            format_type = "md" if export_format == "Markdown (.md)" else "txt"
+            
+            if st.button("导出对话记录", key="export_button"):
+                current_messages_export = st.session_state.identity_messages.get(st.session_state.identity, [])
+                if len([m for m in current_messages_export if m['role'] != 'system']) == 0:
+                    st.error("导出内容不存在")
+                else:
+                    export_content, export_filename, export_mime = export_conversation(current_messages_export, st.session_state.identity, format_type)
+                    st.download_button(
+                        label="点击下载",
+                        data=export_content,
+                        file_name=export_filename,
+                        mime=export_mime,
+                        key="download_button",
+                        use_container_width=True
+                    )
     
     if not st.session_state.identity:
         st.info("请在左侧边栏选择你的身份开始对话")
