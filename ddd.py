@@ -30,6 +30,7 @@ import os
 import json
 import requests
 from datetime import datetime
+from docx import Document
 
 # ==================== 全局配置 ====================
 # API服务地址（硅基流动平台）
@@ -73,11 +74,7 @@ RECOMMENDED_QUESTIONS = {
             "宿舍费用多少？怎么缴费？",
             "宿舍可以自选床位吗？"
         ],
-        "💰 缴费事项": [
-            "学费怎么交？截止日期是哪天？",
-            "住宿费包含在学费里吗？",
-            "可以申请缓缴学费吗？"
-        ],
+
         "📋 报到流程": [
             "报到那天先去哪？需要带什么材料？",
             "家长可以进学校吗？",
@@ -86,7 +83,6 @@ RECOMMENDED_QUESTIONS = {
         "💪 军训安排": [
             "军训几天？身体不好能请假吗？",
             "军训服装需要自己准备吗？",
-            "军训期间住在哪里？"
         ],
         "🚗 交通出行": [
             "从郑州东站怎么去龙子湖校区？",
@@ -107,7 +103,6 @@ RECOMMENDED_QUESTIONS = {
         ],
         "📚 图书馆": [
             "图书馆现在几点关门？周末开吗？",
-            "图书馆入馆教育怎么完成？",
             "图书最多能借多久？"
         ],
         "📦 快递后勤": [
@@ -130,7 +125,6 @@ RECOMMENDED_QUESTIONS = {
         "🔬 科研项目": [
             "科研项目申报时间是什么时候？",
             "项目经费怎么报销？",
-            "科研平台账号怎么开通？"
         ],
         "🛠️ 行政服务": [
             "办公室设备坏了怎么报修？",
@@ -149,6 +143,87 @@ RECOMMENDED_QUESTIONS = {
         ]
     }
 }
+
+
+def load_conversation_history():
+    """
+    从文件加载对话历史
+    
+    从data目录下的conversation_history.json文件加载对话历史，
+    确保网页刷新后对话记录不会丢失。
+    
+    Returns:
+        dict: 各身份的对话历史
+    """
+    history_file = os.path.join("data", "conversation_history.json")
+    if os.path.exists(history_file):
+        try:
+            with open(history_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+
+def save_conversation_history(history):
+    """
+    保存对话历史到文件
+    
+    将各身份的对话历史保存到data目录下的conversation_history.json文件，
+    确保网页刷新后对话记录不会丢失。
+    
+    Args:
+        history (dict): 各身份的对话历史
+    """
+    history_file = os.path.join("data", "conversation_history.json")
+    try:
+        with open(history_file, "w", encoding="utf-8") as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+    except:
+        pass
+
+
+def read_txt_file(file_bytes):
+    """
+    读取TXT文件内容
+    
+    支持UTF-8、GBK、GB2312等编码格式，自动检测并处理编码问题。
+    
+    Args:
+        file_bytes (bytes): 文件字节内容
+    
+    Returns:
+        str: 文件的文本内容
+    """
+    encodings = ['utf-8', 'gbk', 'gb2312', 'gb18030', 'latin-1']
+    for encoding in encodings:
+        try:
+            return file_bytes.decode(encoding)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return file_bytes.decode('utf-8', errors='replace')
+
+
+def read_docx_file(file_bytes):
+    """
+    读取DOCX文件内容
+    
+    使用python-docx库解析Word文档，提取纯文本内容。
+    
+    Args:
+        file_bytes (bytes): 文件字节内容
+    
+    Returns:
+        str: 文档的纯文本内容
+    """
+    try:
+        doc = Document(file_bytes)
+        full_text = []
+        for paragraph in doc.paragraphs:
+            full_text.append(paragraph.text)
+        return '\n'.join(full_text)
+    except Exception as e:
+        return f"读取DOCX文件失败：{str(e)}"
 
 
 def load_school_data():
@@ -456,7 +531,9 @@ def main():
     if "identity" not in st.session_state:
         st.session_state.identity = None  # 当前身份
     if "identity_messages" not in st.session_state:
-        st.session_state.identity_messages = {}  # 各身份的对话历史
+        # 从文件加载对话历史，确保刷新后不丢失
+        saved_history = load_conversation_history()
+        st.session_state.identity_messages = saved_history if saved_history else {}  # 各身份的对话历史
     if "loading" not in st.session_state:
         st.session_state.loading = False  # 是否正在加载
     
@@ -482,6 +559,7 @@ def main():
             if new_identity not in st.session_state.identity_messages:
                 system_prompt = get_system_prompt(new_identity)
                 st.session_state.identity_messages[new_identity] = [{"role": "system", "content": system_prompt}]
+                save_conversation_history(st.session_state.identity_messages)
         
         # 如果已选择身份，显示操作按钮
         if st.session_state.identity:
@@ -491,6 +569,7 @@ def main():
             if st.button("清空当前身份对话历史", key="clear_history", type="secondary"):
                 system_prompt = get_system_prompt(st.session_state.identity)
                 st.session_state.identity_messages[st.session_state.identity] = [{"role": "system", "content": system_prompt}]
+                save_conversation_history(st.session_state.identity_messages)
                 st.success("对话历史已清空！")
             
             # 导出格式选择
@@ -513,6 +592,44 @@ def main():
                         key="download_button",
                         use_container_width=True
                     )
+            
+            # 文件导入功能
+            st.divider()
+            st.header("导入文件")
+            uploaded_file = st.file_uploader(
+                "上传TXT或DOCX文件",
+                type=["txt", "docx"],
+                key="file_uploader"
+            )
+            
+            if uploaded_file is not None:
+                file_name = uploaded_file.name
+                file_ext = file_name.split('.')[-1].lower()
+                
+                # 读取文件内容
+                file_bytes = uploaded_file.read()
+                
+                if file_ext == 'txt':
+                    file_content = read_txt_file(file_bytes)
+                elif file_ext == 'docx':
+                    file_content = read_docx_file(file_bytes)
+                else:
+                    st.error("不支持的文件格式！")
+                    file_content = ""
+                
+                if file_content and st.session_state.identity:
+                    # 将文件内容作为用户输入发送
+                    current_messages_import = st.session_state.identity_messages.get(st.session_state.identity, [])
+                    current_messages_import.append({"role": "user", "content": f"根据以下文件内容回答问题：\n\n{file_content}"})
+                    st.session_state.identity_messages[st.session_state.identity] = current_messages_import
+                    save_conversation_history(st.session_state.identity_messages)
+                    st.session_state.loading = True
+                    st.success(f"文件 '{file_name}' 已导入！")
+                    st.rerun()
+                elif not st.session_state.identity:
+                    st.warning("请先选择身份再导入文件！")
+                elif not file_content:
+                    st.error("文件内容为空或读取失败！")
     
     # ==================== 主内容区 ====================
     # 如果未选择身份，显示提示信息
@@ -544,6 +661,7 @@ def main():
         # 将AI回答添加到对话历史
         current_messages.append({"role": "assistant", "content": response, "word_count": word_count, "elapsed_time": elapsed_time})
         st.session_state.identity_messages[st.session_state.identity] = current_messages
+        save_conversation_history(st.session_state.identity_messages)
         st.session_state.loading = False
         st.rerun()
     
@@ -552,7 +670,7 @@ def main():
     if questions:
         st.subheader("快捷问题")
         for category, q_list in questions.items():
-            with st.expander(category, expanded=False):
+            with st.expander(category, expanded=True):
                 cols = st.columns(2)
                 for i, q in enumerate(q_list):
                     with cols[i % 2]:
@@ -560,6 +678,7 @@ def main():
                             current_messages.append({"role": "user", "content": q})
                             st.session_state.loading = True
                             st.session_state.identity_messages[st.session_state.identity] = current_messages
+                            save_conversation_history(st.session_state.identity_messages)
                             st.rerun()
     
     # ==================== 用户输入 ====================
@@ -575,6 +694,7 @@ def main():
             # 设置加载状态，触发API调用
             st.session_state.loading = True
             st.session_state.identity_messages[st.session_state.identity] = current_messages
+            save_conversation_history(st.session_state.identity_messages)
             st.rerun()
 
 
