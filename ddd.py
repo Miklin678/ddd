@@ -6,8 +6,7 @@ from datetime import datetime
 
 API_URL = "https://api.siliconflow.cn/v1/chat/completions"
 MODEL = "deepseek-ai/DeepSeek-V4-Pro"
-API_KEY = "sk-yvdfsrryqlywwdwfoqtfajaijvniafpsgtetwpkzqqvhecrs"
-
+API_KEY = "sk-cymbwrotvdjtcbqpxvfrcojfiwlwuefpnktswzohudvtzxxy"
 ALIAS_DICT = """
 【别名词典】
 - 教务处 = 教学管理处
